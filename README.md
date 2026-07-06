@@ -1,4 +1,4 @@
-# FIFA World Cup 2026 - Stadium Operations Commander & Assistant
+# FIFA World Cup 2026 - Stadium Operations Commander Dashboard
 
 A production-grade, highly optimized, GenAI-enabled decision-support dashboard and assistant designed for the **Venue Operations Commander** at the FIFA World Cup 2026. This system integrates real-time IoT sensors (gates congestion, transit delay, live incident tracking) with a **Contextual Decision Engine** powered by Gemini API, complete with robust security controls and a local offline heuristics fallback system.
 
@@ -7,79 +7,92 @@ A production-grade, highly optimized, GenAI-enabled decision-support dashboard a
 ## 1. Chosen Vertical & Persona
 - **Vertical**: Operational Intelligence, Crowd Management, & Real-Time Decision Support.
 - **Persona**: Venue Operations Commander & Real-Time Stadium Staff Assistant.
-- **Role & Logic**: The system acts as the digital co-pilot in the Stadium Command Center. It continuously ingests simulated stream feeds (crowd flow at gates, rail system delays, medical/security logs) and translates them into context-aware, safety-first mitigation actions for stadium staff, specifically focusing on spectator safety and WCAG accessibility standards.
+- **Domain Specificity**: Engineered specifically for FIFA World Cup 2026 match-day realities, including:
+  *   **Zoned Access Gates**: Segregates public admission perimeter checkpoints from VIP/Hospitality checkpoints, routing resources based on ticket tier density.
+  *   **Match-Day Operational Phases**: Implements distinct logics for **Pre-Match Arrival** (focus on outer perimeters and scanners), **Half-Time Rush** (focus on internal concourses and beverage queues), and **Post-Match Egress** (focus on transport hub capacities).
+  *   **Multilingual Volunteers Deployment**: Generates directives to dispatch bilingual volunteer teams (Spanish, Arabic, French, German) to bottleneck zones based on match-up spectator demographics.
+  *   **Fan Festival Integrations**: Real-time tracking of the FIFA Fan Festival shuttle line and its corresponding commuter backlog.
 
 ---
 
 ## 2. Technical Architecture & Logical Decision Flow
 
-### High-Contrast Web Dashboard & Core Engine
-Built using **Python** and **Streamlit** to achieve a lightweight footprint (<1MB repository size) while providing a high-contrast, fully responsive dashboard.
+### Enterprise-Grade OOP Design
+The application enforces strict **Separation of Concerns**. All business logic and domain models are written in pure Object-Oriented Python inside `app.py` and are completely isolated from Streamlit UI rendering functions.
 
+- **`Gate`**: Manages capacity, load, status calculations, and access zoning (VIP vs Public).
+- **`TransitLine`**: Manages delay times and computes traffic bottlenecks (e.g. Fan Festival Shuttle).
+- **`Incident`**: Manages operational logs, prioritizing severity levels (Critical, High, Medium, Low).
+- **`StadiumState`**: Aggregates live gate collections, transit status, active incident arrays, and current match-day phase.
+- **`SecuritySanitizer`**: Validates user inputs, escaping HTML tags to block XSS and applying pre-compiled regex filters to neutralize prompt injections.
+- **`DecisionEngine`**: Packages current stadium states into JSON context for the Gemini model and acts as a deterministic fallback rules container.
+
+### System Diagram
 ```
        +---------------------------------------------+
-       |           Venue Command Staff               |
+       |             Operations Commander            |
        +---------------------------------------------+
                               |
-                     [Interactions / Query]
+                    [Interactions & Queries]
                               v
        +---------------------------------------------+
-       |            Streamlit Web Interface          |
-       |  - High-Contrast CSS Theme (WCAG Compliant) |
-       |  - Live Metrics Telemetry Sliders           |
-       |  - Incident Entry Form & Logger             |
+       |            Streamlit UI Renderer            |
+       |  - Color-Coded Zoned Gate Load Indicators   |
+       |  - Active Incident Logs & Logging Forms     |
+       |  - Conversational Assistant Console         |
        +---------------------------------------------+
                               |
-                    [Packages State & Query]
+                [Sanitizes & Packages State]
                               v
        +---------------------------------------------+
-       |        Security & Sanitization Layer        |
-       |  - HTML Escaper (XSS Protection)            |
-       |  - Regex injection scanner (Neutralizer)   |
+       |            SecuritySanitizer                |
+       |  - Escapes HTML (<script> blocks escaped)    |
+       |  - Regex Array (Blocks override prompts)    |
        +---------------------------------------------+
                               |
-               [Sanitized Context + Prompt]
+                       [State Context]
                               v
        +---------------------------------------------+
-       |         Contextual Decision Engine          |
-       |  Does GEMINI_API_KEY exist?                 |
+       |            Contextual Decision Engine       |
+       |  Does GEMINI_API_KEY exist & connect?        |
        |     /                             \         |
        |   [Yes]                          [No/Fail]  |
        |     v                               v       |
 +--------------------------+    +--------------------------+
 |  Gemini 1.5 Flash API    |    | Local Heuristics Engine  |
-|  - Role preservation     |    | - Deterministic Rules    |
-|  - Safety / Accessibility|    | - WCAG/ADA Fallback Plan |
+|  - Role preservation     |    | - Match Phase heuristics |
+|  - safety-first actions  |    | - Multilingual squads    |
+|  - Zoned target plans    |    | - Priority ADA directives|
 +--------------------------+    +--------------------------+
                      \              /
-                  [Command Directives]
+                 [Tactical Directives]
                              v
        +---------------------------------------------+
-       |             Dashboard Display               |
+       |          Assistant Console Display          |
        +---------------------------------------------+
 ```
 
-### Security & Sanitization Architecture
-- **XSS Mitigation**: The query input sanitization uses `html.escape` to neutralize JavaScript tag injection.
-- **Prompt Injection Defense**: Detects phrases like `Ignore previous instructions` or `system override` and dynamically replaces them with `[Instruction Override Blocked by Security Protocol]`.
-- **API Guard**: Reads API keys from environment configurations. If keys are missing, the system warns the commander and shifts to local heuristics instead of crashing.
-
 ---
 
-## 3. Telemetry Assumptions (Simulated Inputs)
-The application operates on the following simulated data structures:
-1. **Gates Data**: Capacity, live percentage loads, and status labels (Normal, Busy, Bottleneck).
-2. **Transit Data**: Scheduled routes, active delay minutes, and status indicators.
-3. **Active Incidents Feed**: Security, logistics, and medical situations logged by roaming stewards, each labeled with a priority (Low, Medium, High, Critical) and location.
+## 3. Operational Telemetry Assumptions
+The system assumes telemetry structures conform to these patterns:
+1.  **Zoned Perimeter Gates**:
+    *   `Gate A`, `Gate B`, `Gate D` are designated as **Public** gates.
+    *   `Gate C` is designated as a **VIP/Hospitality** gate.
+2.  **Match-Day Phases**:
+    *   `Pre-Match Arrival`: Spectators flowing inward; high volume at gates.
+    *   `First Half` & `Second Half`: Crowds mostly seated; low activity.
+    *   `Half-Time Rush`: internal concourses experience high density (restrooms/stalls).
+    *   `Post-Match Egress`: Spectators flowing outward; high volume at egress lines.
+3.  **Transit Routes**:
+    *   `Train Line 1` & `Train Line 2`: Standard high-speed light rail transport links.
+    *   `Fan Festival Shuttle`: High-frequency bus connection to the main fan zone.
 
 ---
 
 ## 4. Setup & Running the Application
 
-### Prerequisites
-- Python 3.9, 3.10, or 3.11 installed.
-
-### Step 1: Clone and Set Up Directory
+### Step 1: Create Virtual Environment
 Create a virtual environment inside the `fifa-ops-commander` directory:
 ```bash
 # Navigate to the workspace directory
@@ -95,14 +108,14 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Step 3: Configure Environment Variables
-Copy the `.env.example` to `.env` and enter your Gemini API Key:
+### Step 3: Configure Environment variables
+Copy the environment variables template and configure your key:
 ```bash
 cp .env.example .env
 ```
 Open `.env` and set:
 ```env
-GEMINI_API_KEY=your_actual_gemini_api_key
+GEMINI_API_KEY=your_gemini_api_key_here
 ```
 *Note: If no API key is specified, the application will run in **Offline Fallback Heuristics Mode**, which contains complete rule-based response logic and remains 100% testable and operational.*
 
@@ -116,10 +129,23 @@ This will spin up a local server (typically at `http://localhost:8501`).
 ---
 
 ## 5. Running the Test Suite
-The automated test suite validates the security sanitization layer, configuration, and the fallback heuristics decision engine.
+The automated test suite uses `pytest` to achieve high coverage, validating state modifications, custom exception structures, and security layers.
 
-Run the tests using `pytest`:
+Run the tests inside the virtual environment:
 ```bash
-pytest test_app.py -v
+./venv/bin/pytest test_app.py -v
 ```
-All unit tests should pass, ensuring the codebase is robust, secure, and ready for production command centers.
+
+### Verified Test Cases
+1.  `test_gate_status_calculations`: Verifies status ranges (Normal, Busy, Bottleneck) based on congestion.
+2.  `test_transit_line_status_calculations`: Verifies delay thresholds for light rail and shuttle routes.
+3.  `test_stadium_state_invalid_keys`: Asserts that updating invalid gates or transit lines raises `KeyError`.
+4.  `test_sanitizer_xss_escaping`: Validates escaping of HTML elements.
+5.  `test_sanitizer_prompt_injection`: Asserts that prompt override commands raise `SanitizationError`.
+6.  `test_sanitizer_empty_input`: Asserts that empty/space inputs raise `ValueError`.
+7.  `test_fallback_gate_mitigation_public_vs_vip`: Confirms VIP checkpoints dispatch VIP Liaison Squads and public checkpoints dispatch bilingual helpers.
+8.  `test_fallback_match_phases`: Confirms that operational logic adapts to pre-match, half-time, and egress realities.
+9.  `test_fallback_incident_severity`: Asserts critical incidents trigger immediate emergency response protocols and cordons.
+10. `test_fallback_transit_festival_delays`: Asserts transit delays alert users and deploy alternative transport buffers.
+11. `test_fallback_accessibility`: Validates ADA/WCAG guides.
+12. `test_execute_query_api_error`: Mocks API connector connection errors, ensuring it raises `APIConnectionError` and falls back gracefully.
