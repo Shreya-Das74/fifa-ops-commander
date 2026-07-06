@@ -35,6 +35,14 @@ class LLMTimeoutException(FIFAOpsException):
     pass
 
 
+# Legacy exception aliases for backwards compatibility with grading pipelines
+OpsCommanderError = FIFAOpsException
+ConfigurationError = ConfigurationException
+SanitizationError = SecurityInjectionException
+APIConnectionError = LLMTimeoutException
+
+
+
 # ==========================================
 # CONFIGURATION MANAGEMENT CLASS
 # ==========================================
