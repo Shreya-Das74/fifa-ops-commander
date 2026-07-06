@@ -17,22 +17,50 @@ load_dotenv()
 
 class FIFAOpsException(Exception):
     """Base exception class for all FIFA 2026 Stadium Ops errors."""
-    pass
+
+    def __init__(self, message: str = "") -> None:
+        """Initializes the exception with a message.
+
+        Args:
+            message: Explanation of the error.
+        """
+        super().__init__(message)
 
 
 class ConfigurationException(FIFAOpsException):
     """Exception raised when system configurations are invalid or missing."""
-    pass
+
+    def __init__(self, message: str = "") -> None:
+        """Initializes the exception with a message.
+
+        Args:
+            message: Explanation of the configuration error.
+        """
+        super().__init__(message)
 
 
 class SecurityInjectionException(FIFAOpsException):
     """Exception raised when inputs violate security prompt injection policies."""
-    pass
+
+    def __init__(self, message: str = "") -> None:
+        """Initializes the exception with a message.
+
+        Args:
+            message: Explanation of the security violation.
+        """
+        super().__init__(message)
 
 
 class LLMTimeoutException(FIFAOpsException):
     """Exception raised when connection to the GenAI model times out or fails."""
-    pass
+
+    def __init__(self, message: str = "") -> None:
+        """Initializes the exception with a message.
+
+        Args:
+            message: Explanation of the connection/timeout error.
+        """
+        super().__init__(message)
 
 
 # Legacy exception aliases for backwards compatibility with grading pipelines
