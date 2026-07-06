@@ -23,9 +23,10 @@ The application enforces strict **Separation of Concerns**. All business logic a
 - **`Gate`**: Manages capacity, load, status calculations, and access zoning (VIP vs Public).
 - **`TransitLine`**: Manages delay times and computes traffic bottlenecks (e.g. Fan Festival Shuttle).
 - **`Incident`**: Manages operational logs, prioritizing severity levels (Critical, High, Medium, Low).
-- **`StadiumState`**: Aggregates live gate collections, transit status, active incident arrays, and current match-day phase.
+- **`StadiumStateContext`**: Aggregates live gate collections, transit status, active incident arrays, and current match-day phase.
 - **`SecuritySanitizer`**: Validates user inputs, escaping HTML tags to block XSS and applying pre-compiled regex filters to neutralize prompt injections.
-- **`DecisionEngine`**: Packages current stadium states into JSON context for the Gemini model and acts as a deterministic fallback rules container.
+- **`DecisionSupportEngine`**: Packages current stadium states into JSON context for the Gemini model and acts as a deterministic fallback rules container.
+- **`AccessibilityUIDashboard`**: Renders all front-end UI components, charts, forms, and chat consoles conforming strictly to WCAG 2.1 AA guidelines.
 
 ### System Diagram
 ```
@@ -36,7 +37,7 @@ The application enforces strict **Separation of Concerns**. All business logic a
                     [Interactions & Queries]
                               v
        +---------------------------------------------+
-       |            Streamlit UI Renderer            |
+       |          AccessibilityUIDashboard           |
        |  - Color-Coded Zoned Gate Load Indicators   |
        |  - Active Incident Logs & Logging Forms     |
        |  - Conversational Assistant Console         |
@@ -53,7 +54,7 @@ The application enforces strict **Separation of Concerns**. All business logic a
                        [State Context]
                               v
        +---------------------------------------------+
-       |            Contextual Decision Engine       |
+       |          DecisionSupportEngine              |
        |  Does GEMINI_API_KEY exist & connect?        |
        |     /                             \         |
        |   [Yes]                          [No/Fail]  |
@@ -141,11 +142,11 @@ Run the tests inside the virtual environment:
 2.  `test_transit_line_status_calculations`: Verifies delay thresholds for light rail and shuttle routes.
 3.  `test_stadium_state_invalid_keys`: Asserts that updating invalid gates or transit lines raises `KeyError`.
 4.  `test_sanitizer_xss_escaping`: Validates escaping of HTML elements.
-5.  `test_sanitizer_prompt_injection`: Asserts that prompt override commands raise `SanitizationError`.
+5.  `test_sanitizer_prompt_injection`: Asserts that prompt override commands raise `SecurityInjectionException`.
 6.  `test_sanitizer_empty_input`: Asserts that empty/space inputs raise `ValueError`.
 7.  `test_fallback_gate_mitigation_public_vs_vip`: Confirms VIP checkpoints dispatch VIP Liaison Squads and public checkpoints dispatch bilingual helpers.
 8.  `test_fallback_match_phases`: Confirms that operational logic adapts to pre-match, half-time, and egress realities.
 9.  `test_fallback_incident_severity`: Asserts critical incidents trigger immediate emergency response protocols and cordons.
 10. `test_fallback_transit_festival_delays`: Asserts transit delays alert users and deploy alternative transport buffers.
 11. `test_fallback_accessibility`: Validates ADA/WCAG guides.
-12. `test_execute_query_api_error`: Mocks API connector connection errors, ensuring it raises `APIConnectionError` and falls back gracefully.
+12. `test_execute_query_api_error`: Mocks API connector connection errors, ensuring it raises `LLMTimeoutException` and falls back gracefully.

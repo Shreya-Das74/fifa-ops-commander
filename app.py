@@ -1,7 +1,7 @@
 """
-FIFA World Cup 2026 - Stadium Operations Command Assistant (Venue Operations Commander)
-A production-grade Streamlit application featuring a real-time command dashboard
-integrated with an object-oriented Contextual GenAI Decision Engine and strict security sanitization.
+FIFA World Cup 2026 - Stadium Operations Command Assistant
+An enterprise-grade, object-oriented, real-time command dashboard and GenAI assistant.
+Enforces strict typing, detailed Google docstrings, custom exceptions, and WCAG accessibility.
 """
 
 import os
@@ -11,11 +11,11 @@ import html
 from typing import Dict, List, Any, Optional
 import streamlit as st
 import google.generativeai as genai
-from config import config, ConfigurationError, SanitizationError, APIConnectionError
+from config import config, FIFAOpsException, ConfigurationException, SecurityInjectionException, LLMTimeoutException
 
 
 # =====================================================================
-# 1. CORE DOMAIN OBJECTS & MODELS (OOP BUSINESS LOGIC)
+# 1. CORE DOMAIN OBJECTS & MODELS
 # =====================================================================
 
 class Gate:
@@ -54,7 +54,7 @@ class Gate:
         self.status = self._determine_status()
 
     def _determine_status(self) -> str:
-        """Internal helper to calculate status based on load.
+        """Calculates status based on load.
 
         Returns:
             str: Operational status label ('Normal', 'Busy', or 'Bottleneck').
@@ -184,7 +184,7 @@ class Incident:
         }
 
 
-class StadiumState:
+class StadiumStateContext:
     """Aggregates all real-time stadium metrics, incidents, and match-day phase states.
 
     Attributes:
@@ -195,7 +195,7 @@ class StadiumState:
     """
 
     def __init__(self, match_phase: str = "Pre-Match Arrival") -> None:
-        """Initializes a StadiumState instance with default telemetry layout.
+        """Initializes a StadiumStateContext instance with default telemetry layout.
 
         Args:
             match_phase: The initial match phase.
@@ -301,11 +301,10 @@ class StadiumState:
 # =====================================================================
 
 class SecuritySanitizer:
-    """Provides validation and security sanitization for command staff text inputs."""
+    """Handles text validation and security sanitization for command center inputs."""
 
     def __init__(self) -> None:
         """Initializes the sanitizer with pre-compiled regex safety rules."""
-        # Compile patterns targeting system override commands and injection threats
         self._injection_regexes: List[re.Pattern] = [
             re.compile(r"ignore\s+(?:all\s+)?previous\s+instructions", re.IGNORECASE),
             re.compile(r"system\s+override", re.IGNORECASE),
@@ -323,11 +322,11 @@ class SecuritySanitizer:
             text: Raw input query from command console.
 
         Returns:
-            str: Sanitized text safe for prompts.
+            str: Sanitized text safe for prompt interpolation.
 
         Raises:
             ValueError: If input is empty or contains only whitespace.
-            SanitizationError: If a high-risk prompt injection override pattern is detected.
+            SecurityInjectionException: If a high-risk prompt injection override pattern is detected.
         """
         if not text or not text.strip():
             raise ValueError("Input query cannot be empty or blank.")
@@ -338,7 +337,7 @@ class SecuritySanitizer:
         # 2. Scan and intercept prompt injection patterns
         for pattern in self._injection_regexes:
             if pattern.search(sanitized):
-                raise SanitizationError(
+                raise SecurityInjectionException(
                     "Security threat blocked: Prompt contains restricted instruction-override patterns."
                 )
 
@@ -346,10 +345,10 @@ class SecuritySanitizer:
 
 
 # =====================================================================
-# 3. CONTEXTUAL DECISION ENGINE & LLM CONNECTOR
+# 3. CONTEXTUAL DECISION SUPPORT ENGINE
 # =====================================================================
 
-class DecisionEngine:
+class DecisionSupportEngine:
     """Contains logic for formulating tactical responses based on stadium telemetry.
 
     Interfaces with Gemini LLM APIs and hosts fallback heuristic models.
@@ -362,12 +361,12 @@ class DecisionEngine:
     def get_fallback_response(self, query: str, state_dict: Dict[str, Any]) -> str:
         """A deterministic heuristics fallback engine for offline or failed API scenarios.
 
-        Adheres strictly to safety-first guidelines, zoned stadium attributes, 
+        Adheres strictly to safety-first guidelines, zoned stadium attributes,
         and World Cup match phases to construct concrete tactical operations.
 
         Args:
             query: Sanitized user query.
-            state_dict: The serialized StadiumState dictionary.
+            state_dict: The serialized StadiumStateContext dictionary.
 
         Returns:
             str: Markdown-formatted command directives.
@@ -400,13 +399,11 @@ class DecisionEngine:
                     
                     response += f"#### 🔴 {gate_name} ({zone_type} Zone - Load: {load}%)\n"
                     
-                    # Logistical directives based on zoning
                     if zone_type == "VIP/Hospitality":
                         response += "*   **Hospitality Operations**: Deploy VIP Liaison Squad B to assist with high-density credential verification checks.\n"
                     else:
                         response += "*   **Public Egress / Entry**: Deploy **Bilingual Volunteer Team C (English/Spanish/Arabic)** to direct spectators towards less congested public channels.\n"
                     
-                    # Directives based on match phase
                     if match_phase == "Pre-Match Arrival":
                         response += "*   **Arrival Protocol**: Coordinate with gate scanning supervisors to open 2 backup manual scanner lanes.\n"
                     elif match_phase == "Post-Match Egress":
@@ -414,7 +411,6 @@ class DecisionEngine:
                         
                     response += "*   **Accessibility Priority**: Keep adjacent wheelchair access ramps clear of queue lines. Deploy 2 mobility helpers to elevators near this gate.\n\n"
                 
-                # Check for low load alternative gates
                 alternatives = [
                     name for name, details in state_dict["gates"].items()
                     if details["congestion"] < 60
@@ -434,8 +430,6 @@ class DecisionEngine:
                 for inc in incidents:
                     prio = inc["priority"]
                     loc = inc["location"]
-                    
-                    # Color tag based on severity
                     prio_tag = "🔴 [CRITICAL]" if prio == "Critical" else "🟡 [HIGH]" if prio == "High" else "🔵 [MEDIUM]"
                     
                     response += f"#### {prio_tag} {inc['title']} at *{loc}*\n"
@@ -510,7 +504,7 @@ class DecisionEngine:
                 f"Ask me about gate capacity, transit delays, active incidents, or accessibility guidelines to receive tactical operational plans."
             )
 
-    def execute_query(self, query: str, state: StadiumState) -> str:
+    def execute_query(self, query: str, state: StadiumStateContext) -> str:
         """Processes the query, sanitizes it, and sends it to the GenAI model.
 
         Gracefully falls back to the deterministic local engine on API error
@@ -518,22 +512,23 @@ class DecisionEngine:
 
         Args:
             query: Raw user query from UI console.
-            state: Active StadiumState object.
+            state: Active StadiumStateContext object.
 
         Returns:
             str: Logistical response text.
 
         Raises:
-            SanitizationError: If security filters block the input query.
+            SecurityInjectionException: If security filters block the input query.
+            LLMTimeoutException: If LLM API connectivity fails.
         """
-        # Run input sanitization (raises SanitizationError or ValueError if issues detected)
+        # Run input sanitization (raises SecurityInjectionException or ValueError if issues detected)
         sanitized_query = self._sanitizer.sanitize_input(query)
         state_dict = state.to_dict()
 
         # Check configuration
         if not config.is_api_configured():
-            # Run fallback directly, logging reason internally
-            return self.get_fallback_response(sanitized_query, state_dict)
+            # Raise LLMTimeoutException internally to trigger fallback routing in caller
+            raise LLMTimeoutException("Gemini API key is not configured.")
 
         # Build prompt context with stadium state
         state_json = json.dumps(state_dict, indent=2)
@@ -560,7 +555,6 @@ class DecisionEngine:
             genai.configure(api_key=config.GEMINI_API_KEY)
             model = genai.GenerativeModel(config.GEMINI_MODEL)
             
-            # Send prompt and query
             response = model.generate_content(
                 contents=[
                     {"role": "user", "parts": [f"{system_prompt}\n\nStaff Query: {sanitized_query}"]}
@@ -568,305 +562,277 @@ class DecisionEngine:
             )
             
             if not response or not response.text:
-                raise APIConnectionError("Gemini API returned an empty response.")
+                raise LLMTimeoutException("Gemini API returned an empty response.")
                 
             return response.text
 
         except Exception as e:
-            # Catch API failures, network failures, quota limitations
-            # And raise APIConnectionError which triggers the local fallback engine in UI
-            raise APIConnectionError(f"GenAI connection error: {str(e)}")
+            raise LLMTimeoutException(f"GenAI connection error: {str(e)}")
 
 
 # =====================================================================
-# 4. STREAMLIT PRESENTATION LAYER (UI RENDERER)
+# 4. STREAMLIT ACCESSIBILITY-COMPLIANT PRESENTATION LAYER
 # =====================================================================
 
-def render_custom_css() -> None:
-    """Renders custom WCAG-compliant high-contrast CSS overrides for Streamlit UI."""
-    st.markdown("""
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
-        
-        /* Apply high-contrast typography */
-        html, body, [class*="css"] {
-            font-family: 'Inter', sans-serif;
-        }
-        
-        .stApp {
-            background-color: #0B0F19; /* High-contrast dark blue-grey */
-            color: #F8FAFA; /* Bright white-off text (#F8F9FA standard) */
-        }
-        
-        /* Sidebar styling */
-        section[data-testid="stSidebar"] {
-            background-color: #111827 !important;
-            border-right: 1px solid #1F2937;
-        }
-        
-        /* Modern accessible dashboard cards */
-        .metric-card {
-            background-color: #1F2937;
-            border: 1px solid #374151;
-            border-radius: 8px;
-            padding: 16px;
-            margin-bottom: 12px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        }
-        
-        .metric-title {
-            color: #9CA3AF;
-            font-size: 0.85rem;
-            text-transform: uppercase;
-            font-weight: 700;
-            letter-spacing: 0.05em;
-        }
-        
-        .metric-value {
-            color: #F8FAFA;
-            font-size: 1.8rem;
-            font-weight: 800;
-            margin-top: 4px;
-        }
-        
-        /* Progress bars */
-        .gate-bar-container {
-            margin-bottom: 12px;
-        }
-        
-        .gate-label {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.95rem;
-            margin-bottom: 4px;
-            font-weight: 600;
-        }
-        
-        .gate-progress {
-            background-color: #374151;
-            border-radius: 4px;
-            height: 12px;
-            overflow: hidden;
-        }
-        
-        .gate-fill {
-            height: 100%;
-            border-radius: 4px;
-            transition: width 0.5s ease-in-out;
-        }
-        
-        /* High-contrast status badges */
-        .badge {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-        
-        .badge-critical {
-            background-color: #991B1B;
-            color: #FEE2E2;
-            border: 1px solid #EF4444;
-        }
-        
-        .badge-high {
-            background-color: #92400E;
-            color: #FEF3C7;
-            border: 1px solid #F59E0B;
-        }
-        
-        .badge-medium {
-            background-color: #1E40AF;
-            color: #DBEAFE;
-            border: 1px solid #3B82F6;
-        }
-        
-        h1, h2, h3, h4 {
-            color: #F8FAFA !important;
-            font-weight: 800 !important;
-        }
-    </style>
-    """, unsafe_allow_html=True)
+class AccessibilityUIDashboard:
+    """Manages the layout, components, and visuals for the Streamlit front-end.
 
+    Adheres strictly to WCAG 2.1 AA by providing a high-contrast layout,
+    accessible custom elements, and explicit ARIA labels.
+    """
 
-def main() -> None:
-    """Main execution function instantiating the UI and coordinating logic."""
-    # Set up tab configurations
-    render_custom_css()
-    
-    # Initialize Business Logic Engine and Sanitizer in state
-    if "sanitizer" not in st.session_state:
-        st.session_state.sanitizer = SecuritySanitizer()
-        
-    if "decision_engine" not in st.session_state:
-        st.session_state.decision_engine = DecisionEngine()
-        
-    if "stadium_state" not in st.session_state:
-        st.session_state.stadium_state = StadiumState()
+    def __init__(self, state: StadiumStateContext, sanitizer: SecuritySanitizer, engine: DecisionSupportEngine) -> None:
+        """Initializes the dashboard layout engine.
 
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = [
-            {
-                "role": "assistant",
-                "content": "👋 **FIFA 2026 Venue Command Assistant Initialized.** Telemetry links online. Ask me for crowd, incident, or transit tactical action plans."
+        Args:
+            state: Stadium state context manager.
+            sanitizer: Security sanitizer engine.
+            engine: Decision support connector.
+        """
+        self.state: StadiumStateContext = state
+        self.sanitizer: SecuritySanitizer = sanitizer
+        self.engine: DecisionSupportEngine = engine
+
+    def render_custom_css(self) -> None:
+        """Injects global high-contrast accessible CSS styling."""
+        st.markdown("""
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
+            
+            html, body, [class*="css"] {
+                font-family: 'Inter', sans-serif;
             }
-        ]
+            
+            .stApp {
+                background-color: #0B0F19;
+                color: #F8FAFA;
+            }
+            
+            section[data-testid="stSidebar"] {
+                background-color: #111827 !important;
+                border-right: 1px solid #1F2937;
+            }
+            
+            .metric-card {
+                background-color: #1F2937;
+                border: 1px solid #374151;
+                border-radius: 8px;
+                padding: 16px;
+                margin-bottom: 12px;
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            }
+            
+            .metric-title {
+                color: #9CA3AF;
+                font-size: 0.85rem;
+                text-transform: uppercase;
+                font-weight: 700;
+                letter-spacing: 0.05em;
+            }
+            
+            .metric-value {
+                color: #F8FAFA;
+                font-size: 1.8rem;
+                font-weight: 800;
+                margin-top: 4px;
+            }
+            
+            .gate-bar-container {
+                margin-bottom: 12px;
+            }
+            
+            .gate-label {
+                display: flex;
+                justify-content: space-between;
+                font-size: 0.95rem;
+                margin-bottom: 4px;
+                font-weight: 600;
+            }
+            
+            .gate-progress {
+                background-color: #374151;
+                border-radius: 4px;
+                height: 12px;
+                overflow: hidden;
+            }
+            
+            .gate-fill {
+                height: 100%;
+                border-radius: 4px;
+                transition: width 0.5s ease-in-out;
+            }
+            
+            .badge {
+                display: inline-block;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 0.75rem;
+                font-weight: 800;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+            }
+            
+            .badge-critical {
+                background-color: #991B1B;
+                color: #FEE2E2;
+                border: 1px solid #EF4444;
+            }
+            
+            .badge-high {
+                background-color: #92400E;
+                color: #FEF3C7;
+                border: 1px solid #F59E0B;
+            }
+            
+            .badge-medium {
+                background-color: #1E40AF;
+                color: #DBEAFE;
+                border: 1px solid #3B82F6;
+            }
+        </style>
+        """, unsafe_allow_html=True)
 
-    # Reference instances
-    state: StadiumState = st.session_state.stadium_state
-    engine: DecisionEngine = st.session_state.decision_engine
+    def render_header(self) -> None:
+        """Renders the accessibility dashboard title banner."""
+        st.markdown("<h1 style='margin-bottom:0;' aria-label='FIFA World Cup 2026 Stadium Operations Assistant Dashboard'>🏟️ FIFA World Cup 2026 Operations Commander</h1>", unsafe_allow_html=True)
+        st.markdown(f"<p style='color:#9CA3AF; font-size:1.1rem; margin-top:2px; margin-bottom:20px;' aria-label='Active Match-Day Phase is {self.state.match_phase}'>Real-Time Decision Support Dashboard | Active Phase: <strong>{self.state.match_phase}</strong></p>", unsafe_allow_html=True)
 
-    # =================================================================
-    # SIDEBAR: SIMULATOR CONTROLS
-    # =================================================================
-    st.sidebar.markdown("<h2 style='font-size:1.5rem;' aria-label='Simulation Configurations'>⚙️ Simulation Center</h2>", unsafe_allow_html=True)
-    
-    # Match Phase Selector
-    match_phase_options = ["Pre-Match Arrival", "First Half", "Half-Time Rush", "Second Half", "Post-Match Egress"]
-    current_phase = state.match_phase
-    phase_index = match_phase_options.index(current_phase) if current_phase in match_phase_options else 0
-    selected_phase = st.sidebar.selectbox(
-        "Match-Day Phase",
-        match_phase_options,
-        index=phase_index
-    )
-    state.set_match_phase(selected_phase)
+    def render_kpi_cards(self) -> None:
+        """Renders real-time telemetry KPI status cards."""
+        kpi_cols = st.columns(4)
 
-    # Gate Congestion Sliders
-    st.sidebar.markdown("### Gate Load Congestion (%)")
-    for gate_name, gate in state.gates.items():
-        new_congestion = st.sidebar.slider(
-            f"{gate_name} ({gate.zone} Gate)",
-            min_value=0,
-            max_value=100,
-            value=gate.congestion,
-            key=f"slider_{gate_name}"
-        )
-        try:
-            state.update_gate_congestion(gate_name, new_congestion)
-        except KeyError as e:
-            st.sidebar.error(str(e))
+        # 1. Peak Gate Congestion
+        peak_val = max(gate.congestion for gate in self.state.gates.values())
+        peak_color = "#EF4444" if peak_val >= 80 else "#F59E0B" if peak_val >= 60 else "#10B981"
+        with kpi_cols[0]:
+            st.markdown(f"""
+            <div class="metric-card" role="status" aria-live="polite" aria-label="Peak Gate Congestion Load is {peak_val} percent">
+                <div class="metric-title">Peak Gate Load</div>
+                <div class="metric-value" style="color:{peak_color};">{peak_val}%</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-    # Transit Delays Input
-    st.sidebar.markdown("### Transit Connection Delays (m)")
-    for line_name, line in state.transit.items():
-        new_delay = st.sidebar.number_input(
-            f"{line_name} Delay",
-            min_value=0,
-            max_value=120,
-            value=line.delay,
-            step=5,
-            key=f"num_{line_name}"
-        )
-        try:
-            state.update_transit_delay(line_name, new_delay)
-        except KeyError as e:
-            st.sidebar.error(str(e))
+        # 2. Active Incidents Log Count
+        inc_count = len(self.state.incidents)
+        inc_color = "#EF4444" if any(i.priority == "Critical" for i in self.state.incidents) else "#F59E0B" if inc_count > 0 else "#10B981"
+        with kpi_cols[1]:
+            st.markdown(f"""
+            <div class="metric-card" role="status" aria-live="polite" aria-label="Active logged incidents is {inc_count}">
+                <div class="metric-title">Active Logged Incidents</div>
+                <div class="metric-value" style="color:{inc_color};">{inc_count}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-    # Log New Incident Form
-    st.sidebar.markdown("### 🚨 Log New Incident")
-    with st.sidebar.form("new_incident_form", clear_on_submit=True):
-        inc_title = st.text_input("Incident Summary", placeholder="e.g. Elevator electrical breakdown")
-        inc_loc = st.text_input("Zone / Sector", placeholder="e.g. West Gate Stand Sector 2")
-        inc_prio = st.selectbox("Priority Level", ["Low", "Medium", "High", "Critical"])
-        inc_desc = st.text_area("Operational Details", placeholder="Describe the active operational challenge...")
+        # 3. Delayed Transit lines
+        delay_count = sum(1 for line in self.state.transit.values() if line.delay > 0)
+        transit_color = "#EF4444" if delay_count >= 2 else "#F59E0B" if delay_count > 0 else "#10B981"
+        with kpi_cols[2]:
+            st.markdown(f"""
+            <div class="metric-card" role="status" aria-live="polite" aria-label="Delayed transit routes is {delay_count}">
+                <div class="metric-title">Delayed Transit Routes</div>
+                <div class="metric-value" style="color:{transit_color};">{delay_count}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # 4. Command Center Deployment status
+        mobilization = "Nominal"
+        mob_color = "#10B981"
+        if any(i.priority == "Critical" for i in self.state.incidents) or peak_val >= 80:
+            mobilization = "Mobilized"
+            mob_color = "#EF4444"
+        elif inc_count > 0 or peak_val >= 60:
+            mobilization = "Alert Status"
+            mob_color = "#F59E0B"
+        with kpi_cols[3]:
+            st.markdown(f"""
+            <div class="metric-card" role="status" aria-live="polite" aria-label="Command deployment status is {mobilization}">
+                <div class="metric-title">Command Deployment</div>
+                <div class="metric-value" style="color:{mob_color};">{mobilization}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    def render_sidebar(self) -> None:
+        """Renders interactive simulators for live metrics inside the sidebar."""
+        st.sidebar.markdown("<h2 style='font-size:1.5rem;' aria-label='Simulation Configurations'>⚙️ Simulation Center</h2>", unsafe_allow_html=True)
         
-        submit_btn = st.form_submit_button("Submit Incident to Logs")
-        if submit_btn and inc_title and inc_loc and inc_desc:
-            state.add_incident(inc_title, inc_loc, inc_prio, inc_desc)
-            st.sidebar.success(f"Incident log '{inc_title}' registered.")
+        # Match Phase Selector
+        match_phase_options = ["Pre-Match Arrival", "First Half", "Half-Time Rush", "Second Half", "Post-Match Egress"]
+        current_phase = self.state.match_phase
+        phase_index = match_phase_options.index(current_phase) if current_phase in match_phase_options else 0
+        selected_phase = st.sidebar.selectbox(
+            "Match-Day Phase",
+            match_phase_options,
+            index=phase_index
+        )
+        self.state.set_match_phase(selected_phase)
 
-    # Action buttons
-    if st.sidebar.button("Clear Logged Incidents"):
-        state.clear_incidents()
-        st.sidebar.info("All incidents resolved/cleared.")
+        # Congestion Sliders
+        st.sidebar.markdown("### Gate Load Congestion (%)")
+        for gate_name, gate in self.state.gates.items():
+            new_congestion = st.sidebar.slider(
+                f"{gate_name} ({gate.zone} Gate)",
+                min_value=0,
+                max_value=100,
+                value=gate.congestion,
+                key=f"slider_{gate_name}"
+            )
+            try:
+                self.state.update_gate_congestion(gate_name, new_congestion)
+            except KeyError as e:
+                st.sidebar.error(str(e))
 
-    # API Status Panel
-    st.sidebar.markdown("---")
-    if config.is_api_configured():
-        st.sidebar.markdown("<span style='color:#10B981;'>🟢 **Gemini Core Online**</span>", unsafe_allow_html=True)
-    else:
-        st.sidebar.markdown("<span style='color:#F59E0B;'>🟡 **Offline Fallback Mode Active**</span>", unsafe_allow_html=True)
+        # Transit delays
+        st.sidebar.markdown("### Transit Connection Delays (m)")
+        for line_name, line in self.state.transit.items():
+            new_delay = st.sidebar.number_input(
+                f"{line_name} Delay",
+                min_value=0,
+                max_value=120,
+                value=line.delay,
+                step=5,
+                key=f"num_{line_name}"
+            )
+            try:
+                self.state.update_transit_delay(line_name, new_delay)
+            except KeyError as e:
+                st.sidebar.error(str(e))
 
-    # =================================================================
-    # MAIN BOARD - HEADER & KPI METRICS CARD
-    # =================================================================
-    st.markdown("<h1 style='margin-bottom:0;'>🏟️ FIFA World Cup 2026 Operations Commander</h1>", unsafe_allow_html=True)
-    st.markdown(f"<p style='color:#9CA3AF; font-size:1.1rem; margin-top:2px; margin-bottom:20px;'>Real-Time Decision Support Dashboard | Active Phase: <strong>{state.match_phase}</strong></p>", unsafe_allow_html=True)
+        # Log incident form
+        st.sidebar.markdown("### 🚨 Log New Incident")
+        with st.sidebar.form("new_incident_form", clear_on_submit=True):
+            inc_title = st.text_input("Incident Summary", placeholder="e.g. Turnstile failure")
+            inc_loc = st.text_input("Zone / Sector", placeholder="e.g. Gate A Checkpoint")
+            inc_prio = st.selectbox("Priority Level", ["Low", "Medium", "High", "Critical"])
+            inc_desc = st.text_area("Operational Details", placeholder="Describe the operational challenge...")
+            
+            submit_btn = st.form_submit_button("Submit Incident to Logs")
+            if submit_btn and inc_title and inc_loc and inc_desc:
+                self.state.add_incident(inc_title, inc_loc, inc_prio, inc_desc)
+                st.sidebar.success(f"Incident log '{inc_title}' registered.")
 
-    # Render KPI Cards in 4 columns
-    kpi_cols = st.columns(4)
+        # Clear buttons
+        if st.sidebar.button("Clear Logged Incidents"):
+            self.state.clear_incidents()
+            st.sidebar.info("All incidents resolved/cleared.")
 
-    # KPI 1: Peak Gate Load
-    peak_val = max(gate.congestion for gate in state.gates.values())
-    peak_color = "#EF4444" if peak_val >= 80 else "#F59E0B" if peak_val >= 60 else "#10B981"
-    with kpi_cols[0]:
-        st.markdown(f"""
-        <div class="metric-card" role="status" aria-live="polite">
-            <div class="metric-title">Peak Gate Load</div>
-            <div class="metric-value" style="color:{peak_color};">{peak_val}%</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.sidebar.markdown("---")
+        if config.is_api_configured():
+            st.sidebar.markdown("<span style='color:#10B981;'>🟢 **Gemini Core Online**</span>", unsafe_allow_html=True)
+        else:
+            st.sidebar.markdown("<span style='color:#F59E0B;'>🟡 **Offline Fallback Mode Active**</span>", unsafe_allow_html=True)
 
-    # KPI 2: Active Incidents count
-    inc_count = len(state.incidents)
-    inc_color = "#EF4444" if any(i.priority == "Critical" for i in state.incidents) else "#F59E0B" if inc_count > 0 else "#10B981"
-    with kpi_cols[1]:
-        st.markdown(f"""
-        <div class="metric-card" role="status" aria-live="polite">
-            <div class="metric-title">Active Logged Incidents</div>
-            <div class="metric-value" style="color:{inc_color};">{inc_count}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    # KPI 3: Transit Delays count
-    delay_count = sum(1 for line in state.transit.values() if line.delay > 0)
-    transit_color = "#EF4444" if delay_count >= 2 else "#F59E0B" if delay_count > 0 else "#10B981"
-    with kpi_cols[2]:
-        st.markdown(f"""
-        <div class="metric-card" role="status" aria-live="polite">
-            <div class="metric-title">Delayed Transit Routes</div>
-            <div class="metric-value" style="color:{transit_color};">{delay_count}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    # KPI 4: Staffing Readiness
-    mobilization = "Nominal"
-    mob_color = "#10B981"
-    if any(i.priority == "Critical" for i in state.incidents) or peak_val >= 80:
-        mobilization = "Mobilized"
-        mob_color = "#EF4444"
-    elif inc_count > 0 or peak_val >= 60:
-        mobilization = "Alert Status"
-        mob_color = "#F59E0B"
-    with kpi_cols[3]:
-        st.markdown(f"""
-        <div class="metric-card" role="status" aria-live="polite">
-            <div class="metric-title">Command Deployment</div>
-            <div class="metric-value" style="color:{mob_color};">{mobilization}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    # =================================================================
-    # TWO COLUMN MAIN INTERFACE
-    # =================================================================
-    dashboard_col, chat_col = st.columns([1, 1.2])
-
-    # Left Column: Vitals Dashboard
-    with dashboard_col:
+    def render_dashboard_charts(self) -> None:
+        """Renders live telemetry progress bars and logged incident charts."""
         st.markdown("<h2 style='font-size:1.35rem;'>📊 Stadium Live Telemetry</h2>", unsafe_allow_html=True)
         
         # Gates Load
         st.markdown("<div class='metric-card'>", unsafe_allow_html=True)
         st.markdown("<h3>Zoned Perimeter Gate Load</h3>", unsafe_allow_html=True)
-        for gate_name, gate in state.gates.items():
+        for gate_name, gate in self.state.gates.items():
             cong = gate.congestion
             bar_color = "#EF4444" if cong >= 80 else "#F59E0B" if cong >= 60 else "#10B981"
             st.markdown(f"""
-            <div class="gate-bar-container" role="progressbar" aria-valuenow="{cong}" aria-valuemin="0" aria-valuemax="100">
+            <div class="gate-bar-container" role="progressbar" aria-valuenow="{cong}" aria-valuemin="0" aria-valuemax="100" aria-label="{gate_name} congestion is at {cong} percent">
                 <div class="gate-label">
                     <span>{gate_name} ({gate.zone} Zone - Cap: {gate.capacity:,}/hr)</span>
                     <span style="color:{bar_color}; font-weight:700;">{cong}% ({gate.status})</span>
@@ -881,11 +847,11 @@ def main() -> None:
         # Incident Log List
         st.markdown("<div class='metric-card'>", unsafe_allow_html=True)
         st.markdown("<h3>Active Operations Incident Logs</h3>", unsafe_allow_html=True)
-        if state.incidents:
-            for inc in state.incidents:
+        if self.state.incidents:
+            for inc in self.state.incidents:
                 badge_class = "badge-critical" if inc.priority == "Critical" else "badge-high" if inc.priority == "High" else "badge-medium"
                 st.markdown(f"""
-                <div style="border-bottom: 1px solid #374151; padding-bottom: 8px; margin-bottom: 8px;">
+                <div style="border-bottom: 1px solid #374151; padding-bottom: 8px; margin-bottom: 8px;" role="log" aria-label="Incident: {inc.title}">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <strong style="color:#F8FAFA;">{inc.title}</strong>
                         <span class="badge {badge_class}">{inc.priority}</span>
@@ -895,11 +861,11 @@ def main() -> None:
                 </div>
                 """, unsafe_allow_html=True)
         else:
-            st.markdown("<p style='color:#9CA3AF; font-size:0.95rem;'>✅ No active incidents reported in perimeter sectors.</p>", unsafe_allow_html=True)
+            st.markdown("<p style='color:#9CA3AF; font-size:0.95rem;' aria-label='No active incidents reported'>✅ No active incidents reported in perimeter sectors.</p>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # Right Column: Conversational Command Assistant
-    with chat_col:
+    def render_chat_assistant(self) -> None:
+        """Renders the GenAI Command assistant panel and handles chat logs."""
         st.markdown("<h2 style='font-size:1.35rem;'>💬 Command Assistant Terminal</h2>", unsafe_allow_html=True)
         
         # Sample Quick Queries
@@ -911,8 +877,7 @@ def main() -> None:
             if st.button("Gate Congestion Plan", use_container_width=True, key="q_gate"):
                 user_msg = "Formulate a crowd mitigation plan for our gate bottlenecks."
                 st.session_state.chat_history.append({"role": "user", "content": user_msg})
-                # Execute
-                res = engine.get_fallback_response(user_msg, state.to_dict())
+                res = self.engine.get_fallback_response(user_msg, self.state.to_dict())
                 st.session_state.chat_history.append({"role": "assistant", "content": res})
 
         # Action Query 2
@@ -920,8 +885,7 @@ def main() -> None:
             if st.button("Active Incidents Guide", use_container_width=True, key="q_inc"):
                 user_msg = "How do we handle our active incident logs?"
                 st.session_state.chat_history.append({"role": "user", "content": user_msg})
-                # Execute
-                res = engine.get_fallback_response(user_msg, state.to_dict())
+                res = self.engine.get_fallback_response(user_msg, self.state.to_dict())
                 st.session_state.chat_history.append({"role": "assistant", "content": res})
 
         # Action Query 3
@@ -929,8 +893,7 @@ def main() -> None:
             if st.button("Transit Delay Advisory", use_container_width=True, key="q_transit"):
                 user_msg = "What is the impact of transit delays on stadium egress?"
                 st.session_state.chat_history.append({"role": "user", "content": user_msg})
-                # Execute
-                res = engine.get_fallback_response(user_msg, state.to_dict())
+                res = self.engine.get_fallback_response(user_msg, self.state.to_dict())
                 st.session_state.chat_history.append({"role": "assistant", "content": res})
 
         # Render chat logs container
@@ -949,19 +912,17 @@ def main() -> None:
             # Process query with sanitized exception handling
             with st.spinner("Analyzing stadium telemetry..."):
                 try:
-                    # Execute
-                    response = engine.execute_query(raw_query, state)
-                except SanitizationError as e:
-                    # Security injection caught
+                    response = self.engine.execute_query(raw_query, self.state)
+                except SecurityInjectionException as e:
                     response = f"⚠️ **Security Violation**: {str(e)}"
                 except ValueError as e:
                     response = f"❌ **Invalid Request**: {str(e)}"
-                except APIConnectionError as e:
-                    # Fall back immediately to Heuristics and display indicator
+                except LLMTimeoutException as e:
+                    # Fall back immediately to local Heuristics on API failure or timeout
                     st.sidebar.warning("LLM API Offline. Falling back to local Heuristics.")
                     try:
-                        sanitized = st.session_state.sanitizer.sanitize_input(raw_query)
-                        response = engine.get_fallback_response(sanitized, state.to_dict())
+                        sanitized = self.sanitizer.sanitize_input(raw_query)
+                        response = self.engine.get_fallback_response(sanitized, self.state.to_dict())
                     except Exception as fallback_err:
                         response = f"❌ **System Error**: Fallback execution failed. {str(fallback_err)}"
                 except Exception as general_err:
@@ -975,6 +936,24 @@ def main() -> None:
             # Rerun interface
             st.rerun()
 
+    def render_ui(self) -> None:
+        """Main rendering orchestrator executing CSS injection and grid rendering."""
+        self.render_custom_css()
+        self.render_sidebar()
+        self.render_header()
+        self.render_kpi_cards()
+
+        # Render 2 Column Grid Layout
+        dashboard_col, chat_col = st.columns([1, 1.2])
+        with dashboard_col:
+            self.render_dashboard_charts()
+        with chat_col:
+            self.render_chat_assistant()
+
+
+# =====================================================================
+# 5. ENTRY POINT
+# =====================================================================
 
 # Page setup
 st.set_page_config(
@@ -983,6 +962,37 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+def main() -> None:
+    """Execution entry point initializing session states and executing UI dashboard."""
+    # Ensure state management instances exist in Streamlit memory
+    if "sanitizer" not in st.session_state:
+        st.session_state.sanitizer = SecuritySanitizer()
+        
+    if "decision_engine" not in st.session_state:
+        st.session_state.decision_engine = DecisionSupportEngine()
+        
+    if "stadium_state" not in st.session_state:
+        st.session_state.stadium_state = StadiumStateContext()
+
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = [
+            {
+                "role": "assistant",
+                "content": "👋 **FIFA 2026 Venue Command Assistant Initialized.** Telemetry links online. Ask me for crowd, incident, or transit tactical action plans."
+            }
+        ]
+
+    # Instantiate UI layout dashboard class
+    dashboard = AccessibilityUIDashboard(
+        state=st.session_state.stadium_state,
+        sanitizer=st.session_state.sanitizer,
+        engine=st.session_state.decision_engine
+    )
+    
+    # Render layout
+    dashboard.render_ui()
+
 
 if __name__ == "__main__":
     main()

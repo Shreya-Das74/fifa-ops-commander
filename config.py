@@ -1,13 +1,13 @@
 """
-Configuration management module for the FIFA World Cup 2026 Stadium Operations Assistant.
-Loads variables from the environment and defines the core exception hierarchy.
+Configuration and custom exceptions module for the FIFA 2026 Stadium Operations Assistant.
+Loads variables from the environment and defines the core system exception hierarchy.
 """
 
 import os
-from typing import Any
+from typing import Optional
 from dotenv import load_dotenv
 
-# Load environment variables from .env file if it exists
+# Load environment variables
 load_dotenv()
 
 
@@ -15,37 +15,37 @@ load_dotenv()
 # CUSTOM EXCEPTION HIERARCHY
 # ==========================================
 
-class OpsCommanderError(Exception):
-    """Base exception class for all FIFA 2026 Ops Commander errors."""
+class FIFAOpsException(Exception):
+    """Base exception class for all FIFA 2026 Stadium Ops errors."""
     pass
 
 
-class ConfigurationError(OpsCommanderError):
-    """Exception raised when configuration parameters are invalid or missing."""
+class ConfigurationException(FIFAOpsException):
+    """Exception raised when system configurations are invalid or missing."""
     pass
 
 
-class SanitizationError(OpsCommanderError):
-    """Exception raised when security filters detect potential malicious input."""
+class SecurityInjectionException(FIFAOpsException):
+    """Exception raised when inputs violate security prompt injection policies."""
     pass
 
 
-class APIConnectionError(OpsCommanderError):
-    """Exception raised when external GenAI API calls fail or timeout."""
+class LLMTimeoutException(FIFAOpsException):
+    """Exception raised when connection to the GenAI model times out or fails."""
     pass
 
 
 # ==========================================
-# CONFIGURATION CONTAINER
+# CONFIGURATION MANAGEMENT CLASS
 # ==========================================
 
 class Config:
-    """Holds configuration parameters and exports validation helpers.
+    """Manages application settings and API configurations.
 
     Attributes:
-        GEMINI_API_KEY (str): API credentials fetched from system environment.
-        GEMINI_MODEL (str): AI model name targeting gemini-1.5-flash.
-        APP_NAME (str): Main application branding string.
+        _gemini_api_key (str): Credentials key fetched from system variables.
+        _gemini_model (str): Name of target Google Generative AI model.
+        _app_name (str): Branding title for command dashboard.
     """
 
     def __init__(self) -> None:
@@ -56,7 +56,7 @@ class Config:
 
     @property
     def GEMINI_API_KEY(self) -> str:
-        """Gets the configured Gemini API key.
+        """Retrieves the Gemini API key.
 
         Returns:
             str: The active API key.
@@ -65,7 +65,7 @@ class Config:
 
     @property
     def GEMINI_MODEL(self) -> str:
-        """Gets the configured Gemini Model name.
+        """Retrieves the Gemini model name.
 
         Returns:
             str: Model identifier string.
@@ -74,7 +74,7 @@ class Config:
 
     @property
     def APP_NAME(self) -> str:
-        """Gets the application branding title.
+        """Retrieves the application branding name.
 
         Returns:
             str: Name of the application.
@@ -82,10 +82,10 @@ class Config:
         return self._app_name
 
     def is_api_configured(self) -> bool:
-        """Checks if the Gemini API credentials are set and valid.
+        """Checks if the Gemini API key is configured.
 
         Returns:
-            bool: True if key is set, False if missing or default placeholder.
+            bool: True if key is set and valid, False otherwise.
         """
         key = self._gemini_api_key
         if not key:
