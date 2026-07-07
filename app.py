@@ -4,11 +4,10 @@ An enterprise-grade, functional-modular, real-time command dashboard and GenAI a
 Enforces strict typing, detailed Google docstrings, custom exceptions, and WCAG accessibility.
 """
 
-import os
 import json
 import re
 import html
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 import streamlit as st
 import google.generativeai as genai
 from config import config, FIFAOpsException, ConfigurationException, SecurityInjectionException, LLMTimeoutException
@@ -1044,7 +1043,6 @@ class AccessibilityUIDashboard:
         
         # Sample Quick Queries
         st.markdown("<p style='font-size:0.85rem; color:#9CA3AF; margin-bottom:6px;'>Quick Action Suggestions:</p>", unsafe_allow_html=True)
-        st.columns(3)
         s_cols = st.columns(3)
         
         # Action Query 1
