@@ -719,3 +719,35 @@ def test_main_entry_point(monkeypatch: pytest.MonkeyPatch) -> None:
     inject_mock_streamlit(monkeypatch, mock_st)
 
     runpy.run_path("app.py", run_name="__main__")
+
+
+def test_decision_engine_init_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify initialization exception path in DecisionSupportEngine."""
+    monkeypatch.setattr(config, "is_api_configured", lambda: True)
+    
+    def raise_err(*args: Any, **kwargs: Any) -> Any:
+        raise Exception("Mock init error")
+    
+    monkeypatch.setattr(genai, "configure", raise_err)
+    engine = DecisionSupportEngine()
+    assert engine._configured is False
+    assert engine._model is None
+
+
+def test_decision_engine_lazy_configure_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify lazy configuration exception path in DecisionSupportEngine."""
+    engine = DecisionSupportEngine()
+    engine._configured = False
+    engine._model = None
+    
+    monkeypatch.setattr(config, "is_api_configured", lambda: True)
+    
+    def raise_err(*args: Any, **kwargs: Any) -> Any:
+        raise Exception("Mock lazy configure error")
+    
+    monkeypatch.setattr(genai, "configure", raise_err)
+    
+    state = StadiumStateContext()
+    with pytest.raises(LLMTimeoutException) as exc_info:
+        engine.execute_query("What is the gate congestion?", state)
+    assert "Mock lazy configure error" in str(exc_info.value)
