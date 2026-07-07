@@ -169,7 +169,8 @@ def test_sanitizer_xss_escaping(sanitizer: SecuritySanitizer) -> None:
     malicious = "<script>alert('hack')</script>"
     sanitized = sanitizer.sanitize_input(malicious)
     assert "<script>" not in sanitized
-    assert "&lt;script&gt;" in sanitized
+    assert "script" not in sanitized
+    assert "&#x27;hack&#x27;" in sanitized
 
 
 def test_sanitizer_prompt_injection(sanitizer: SecuritySanitizer) -> None:

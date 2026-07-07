@@ -35,12 +35,12 @@ def sanitize_input(text: str) -> str:
     """
     if not text or not text.strip():
         raise ValueError("Input query cannot be empty or whitespace only.")
-    escaped = html.escape(text)
-    clean_text = re.sub(r"<[^>]*>", "", escaped)
+    clean_tags = re.sub(r"<[^>]*>", "", text)
+    escaped = html.escape(clean_tags)
     for pattern in INJECTION_REGEXES:
-        if pattern.search(clean_text):
+        if pattern.search(escaped):
             raise SecurityInjectionException("Security threat blocked: Prompt injection detected.")
-    return clean_text
+    return escaped
 
 
 class SecuritySanitizer:

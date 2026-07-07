@@ -11,7 +11,7 @@ from state_engine import StadiumStateContext
 from security_engine import SecuritySanitizer
 
 # Localized offline fallbacks
-def _fallback_gate_plan(query: str, state_dict: Dict[str, Any], match_phase: str) -> str:
+def _fallback_gate_plan(state_dict: Dict[str, Any], match_phase: str) -> str:
     """Builds fallback directive for perimeter gate bottleneck queries."""
     high_gates = [
         name for name, details in state_dict["gates"].items()
@@ -52,7 +52,7 @@ def _fallback_gate_plan(query: str, state_dict: Dict[str, Any], match_phase: str
     return response
 
 
-def _fallback_incident_plan(query: str, state_dict: Dict[str, Any], match_phase: str) -> str:
+def _fallback_incident_plan(state_dict: Dict[str, Any], match_phase: str) -> str:
     """Builds fallback directive for security, medical, and technical incident logs."""
     incidents = state_dict["incidents"]
     if incidents:
@@ -83,7 +83,7 @@ def _fallback_incident_plan(query: str, state_dict: Dict[str, Any], match_phase:
     return response
 
 
-def _fallback_transit_plan(query: str, state_dict: Dict[str, Any], match_phase: str) -> str:
+def _fallback_transit_plan(state_dict: Dict[str, Any], match_phase: str) -> str:
     """Builds fallback directive for transit connections and fan shuttle networks."""
     transit = state_dict["transit"]
     delays = [name for name, details in transit.items() if details["delay"] > 0]
@@ -111,7 +111,7 @@ def _fallback_transit_plan(query: str, state_dict: Dict[str, Any], match_phase: 
     return response
 
 
-def _fallback_accessibility_plan(query: str, state_dict: Dict[str, Any], match_phase: str) -> str:
+def _fallback_accessibility_plan(state_dict: Dict[str, Any], match_phase: str) -> str:
     """Builds fallback accessibility layout directives."""
     return (
         "### ♿ Accessibility & Inclusive Egress Guidelines\n\n"
@@ -122,7 +122,7 @@ def _fallback_accessibility_plan(query: str, state_dict: Dict[str, Any], match_p
     )
 
 
-def _fallback_default_plan(query: str, state_dict: Dict[str, Any], match_phase: str) -> str:
+def _fallback_default_plan(state_dict: Dict[str, Any], match_phase: str) -> str:
     """Builds fallback default informational response."""
     peak_val = max(details['congestion'] for details in state_dict['gates'].values())
     has_transit_delays = any(details['delay'] > 0 for details in state_dict['transit'].values())
@@ -151,19 +151,19 @@ def get_fallback_response(query: str, state_dict: Dict[str, Any]) -> str:
     match_phase = state_dict.get("match_phase", "Pre-Match Arrival")
     
     if any(k in query_lower for k in ["gate", "bottleneck", "congestion", "crowd", "capacity"]):
-        return _fallback_gate_plan(query_lower, state_dict, match_phase)
+        return _fallback_gate_plan(state_dict, match_phase)
 
     elif any(k in query_lower for k in ["incident", "emergency", "medical", "fire", "security", "fail", "stuck"]):
-        return _fallback_incident_plan(query_lower, state_dict, match_phase)
+        return _fallback_incident_plan(state_dict, match_phase)
 
     elif any(k in query_lower for k in ["transit", "train", "bus", "delay", "shuttle", "egress", "station", "festival"]):
-        return _fallback_transit_plan(query_lower, state_dict, match_phase)
+        return _fallback_transit_plan(state_dict, match_phase)
 
     elif any(k in query_lower for k in ["accessibility", "wheelchair", "disabled", "mobility", "ada"]):
-        return _fallback_accessibility_plan(query_lower, state_dict, match_phase)
+        return _fallback_accessibility_plan(state_dict, match_phase)
 
     else:
-        return _fallback_default_plan(query_lower, state_dict, match_phase)
+        return _fallback_default_plan(state_dict, match_phase)
 
 
 def get_incident_commander_fallback(incident: Dict[str, Any], state_dict: Dict[str, Any]) -> str:

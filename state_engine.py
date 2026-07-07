@@ -388,6 +388,9 @@ class StadiumStateContext:
         self._transit: Dict[str, TransitLine] = {
             name: TransitLine(d) for name, d in self.state["transit"].items()
         }
+        self._cached_incidents: List[Incident] = [
+            Incident(i) for i in self.state["incidents"]
+        ]
 
     @property
     def match_phase(self) -> str:
@@ -416,7 +419,7 @@ class StadiumStateContext:
     @property
     def incidents(self) -> List[Incident]:
         """Gets incident wrappers."""
-        return [Incident(i) for i in self.state["incidents"]]
+        return self._cached_incidents
 
     def update_gate_congestion(self, name: str, level: int) -> None:
         """Updates gate congestion."""
@@ -433,10 +436,12 @@ class StadiumStateContext:
     def add_incident(self, title: str, location: str, priority: str, description: str) -> None:
         """Adds a new incident."""
         add_incident_state(self.state, title, location, priority, description)
+        self._cached_incidents.append(Incident(self.state["incidents"][-1]))
 
     def clear_incidents(self) -> None:
         """Clears all logged incidents."""
         clear_incidents_state(self.state)
+        self._cached_incidents.clear()
 
     def to_dict(self) -> Dict[str, Any]:
         """Converts state to dict."""

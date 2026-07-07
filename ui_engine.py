@@ -139,7 +139,6 @@ class AccessibilityUIDashboard:
 
     def render_kpi_cards(self) -> None:
         """Renders real-time telemetry KPI status cards."""
-        st.columns(4)
         kpi_cols = st.columns(4)
 
         # 1. Peak Gate Congestion
