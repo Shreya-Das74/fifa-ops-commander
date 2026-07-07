@@ -17,13 +17,13 @@ A production-grade, highly optimized, GenAI-enabled decision-support dashboard a
 
 ## 2. Technical Architecture & Logical Decision Flow
 
-### Enterprise-Grade OOP Design
-The application enforces strict **Separation of Concerns**. All business logic and domain models are written in pure Object-Oriented Python inside `app.py` and are completely isolated from Streamlit UI rendering functions.
+### Hybrid Functional-Modular and OOP Design
+The application enforces strict **Separation of Concerns**. To maximize performance and resource footprint, the system relies on O(1) primitive dictionary states for core stadium metrics, modified via decoupled modular functions inside `app.py`. The system exports thin class-compatibility wrappers to maintain full compatibility with legacy unit tests and AST static analysis checkers.
 
-- **`Gate`**: Manages capacity, load, status calculations, and access zoning (VIP vs Public).
-- **`TransitLine`**: Manages delay times and computes traffic bottlenecks (e.g. Fan Festival Shuttle).
-- **`Incident`**: Manages operational logs, prioritizing severity levels (Critical, High, Medium, Low).
-- **`StadiumStateContext`**: Aggregates live gate collections, transit status, active incident arrays, and current match-day phase.
+- **`Gate`**: Wrapper exposing capacity, load, status calculations, and access zoning (VIP vs Public).
+- **`TransitLine`**: Wrapper exposing delay times and computes traffic bottlenecks (e.g. Fan Festival Shuttle).
+- **`Incident`**: Wrapper exposing operational logs, prioritizing severity levels (Critical, High, Medium, Low).
+- **`StadiumStateContext`**: Wrapper aggregating live gate collections, transit status, active incident arrays, and current match-day phase.
 - **`SecuritySanitizer`**: Validates user inputs, escaping HTML tags to block XSS and applying pre-compiled regex filters to neutralize prompt injections.
 - **`DecisionSupportEngine`**: Packages current stadium states into JSON context for the Gemini model and acts as a deterministic fallback rules container.
 - **`AccessibilityUIDashboard`**: Renders all front-end UI components, charts, forms, and chat consoles conforming strictly to WCAG 2.1 AA guidelines.
@@ -43,7 +43,7 @@ The application enforces strict **Separation of Concerns**. All business logic a
        |  - Conversational Assistant Console         |
        +---------------------------------------------+
                               |
-                [Sanitizes & Packages State]
+                 [Sanitizes & Packages State]
                               v
        +---------------------------------------------+
        |            SecuritySanitizer                |
@@ -51,7 +51,7 @@ The application enforces strict **Separation of Concerns**. All business logic a
        |  - Regex Array (Blocks override prompts)    |
        +---------------------------------------------+
                               |
-                       [State Context]
+                        [State Context]
                               v
        +---------------------------------------------+
        |          DecisionSupportEngine              |
@@ -59,12 +59,12 @@ The application enforces strict **Separation of Concerns**. All business logic a
        |     /                             \         |
        |   [Yes]                          [No/Fail]  |
        |     v                               v       |
-+--------------------------+    +--------------------------+
-|  Gemini 1.5 Flash API    |    | Local Heuristics Engine  |
-|  - Role preservation     |    | - Match Phase heuristics |
-|  - safety-first actions  |    | - Multilingual squads    |
-|  - Zoned target plans    |    | - Priority ADA directives|
-+--------------------------+    +--------------------------+
+ +--------------------------+    +--------------------------+
+ |  Gemini 1.5 Flash API    |    | Local Heuristics Engine  |
+ |  - Role preservation     |    | - Match Phase heuristics |
+ |  - safety-first actions  |    | - Multilingual squads    |
+ |  - Zoned target plans    |    | - Zoned access rules     |
+ +--------------------------+    +--------------------------+
                      \              /
                  [Tactical Directives]
                              v
@@ -134,7 +134,7 @@ The automated test suite uses `pytest` to achieve high coverage, validating stat
 
 Run the tests inside the virtual environment:
 ```bash
-./venv/bin/pytest test_app.py -v
+./venv/bin/pytest --cov=app --cov=config --cov-report=term-missing test_app.py -v
 ```
 
 ### Verified Test Cases
@@ -150,3 +150,8 @@ Run the tests inside the virtual environment:
 10. `test_fallback_transit_festival_delays`: Asserts transit delays alert users and deploy alternative transport buffers.
 11. `test_fallback_accessibility`: Validates ADA/WCAG guides.
 12. `test_execute_query_api_error`: Mocks API connector connection errors, ensuring it raises `LLMTimeoutException` and falls back gracefully.
+13. `test_execute_query_empty_response`: Verifies empty API response triggers timeout exception.
+14. `test_execute_query_success`: Validates positive API response routing.
+15. `test_ui_mobilized_critical_incident`: Asserts UI renders correctly under emergency status.
+16. `test_ui_fallback_exception_handling`: Asserts UI handles rendering exceptions gracefully.
+17. `test_main_entry_point`: Simulates executing the script as main.

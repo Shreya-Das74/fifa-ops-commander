@@ -4,9 +4,20 @@ Verifies custom exceptions, sanitization blocks, OOP states, and domain fallback
 """
 
 import pytest
-from typing import Dict, Any
+from typing import Dict, Any, List
 import google.generativeai as genai
-from app import Gate, TransitLine, Incident, StadiumStateContext, SecuritySanitizer, DecisionSupportEngine
+import runpy
+import streamlit as st
+from app import (
+    Gate,
+    TransitLine,
+    Incident,
+    StadiumStateContext,
+    SecuritySanitizer,
+    DecisionSupportEngine,
+    AccessibilityUIDashboard,
+    main
+)
 from config import config, FIFAOpsException, ConfigurationException, SecurityInjectionException, LLMTimeoutException
 
 
@@ -77,6 +88,10 @@ def critical_state() -> StadiumStateContext:
 def test_gate_status_calculations() -> None:
     """Verify that gate status is correctly calculated from congestion levels."""
     gate = Gate("Test Gate", 10000, "Public", 10)
+    assert gate.name == "Test Gate"
+    assert gate.capacity == 10000
+    assert gate.zone == "Public"
+    assert gate.congestion == 10
     assert gate.status == "Normal"
 
     gate.update_congestion(65)
@@ -84,11 +99,15 @@ def test_gate_status_calculations() -> None:
 
     gate.update_congestion(85)
     assert gate.status == "Bottleneck"
+    assert gate.to_dict()["status"] == "Bottleneck"
 
 
 def test_transit_line_status_calculations() -> None:
     """Verify transit line status is computed correctly based on delay minutes."""
     line = TransitLine("Test Line", False, 0)
+    assert line.name == "Test Line"
+    assert line.is_fan_festival_route is False
+    assert line.delay == 0
     assert line.status == "On Time"
 
     line.update_delay(5)
@@ -96,6 +115,32 @@ def test_transit_line_status_calculations() -> None:
 
     line.update_delay(30)
     assert line.status == "Delayed"
+    assert line.to_dict()["status"] == "Delayed"
+
+
+def test_incident_properties() -> None:
+    """Verify incident wrapper properties map correctly to state dictionary."""
+    state_dict = {
+        "id": "inc_99",
+        "title": "Power Cut",
+        "location": "Concourse Sector 200",
+        "priority": "Medium",
+        "description": "Partial blackout. Technical team dispatched.",
+        "status": "Active"
+    }
+    incident = Incident(state_dict)
+    assert incident.incident_id == "inc_99"
+    assert incident.title == "Power Cut"
+    assert incident.location == "Concourse Sector 200"
+    assert incident.priority == "Medium"
+    assert incident.description == "Partial blackout. Technical team dispatched."
+    assert incident.status == "Active"
+    assert incident.to_dict()["id"] == "inc_99"
+
+    # Positional arg init test
+    inc2 = Incident("inc_100", "Fire Alarm", "Concourse", "Critical", "Test desc", "Active")
+    assert inc2.incident_id == "inc_100"
+    assert inc2.title == "Fire Alarm"
 
 
 def test_stadium_state_invalid_keys(normal_state: StadiumStateContext) -> None:
@@ -192,20 +237,20 @@ def test_fallback_match_phases(engine: DecisionSupportEngine, normal_state: Stad
     query = "Crowd congestion query"
     
     # 1. Pre-Match Arrival
-    normal_state.set_match_phase("Pre-Match Arrival")
+    normal_state.match_phase = "Pre-Match Arrival"
     normal_state.update_gate_congestion("Gate A", 90)
     res_arrival = engine.get_fallback_response(query, normal_state.to_dict())
     assert "Pre-Match Arrival" in res_arrival
     assert "Arrival Protocol" in res_arrival
 
     # 2. Half-Time Rush
-    normal_state.set_match_phase("Half-Time Rush")
+    normal_state.match_phase = "Half-Time Rush"
     res_halftime = engine.get_fallback_response(query, normal_state.to_dict())
     assert "Half-Time Rush" in res_halftime
     assert "concession area buffer queues" in res_halftime
 
     # 3. Post-Match Egress
-    normal_state.set_match_phase("Post-Match Egress")
+    normal_state.match_phase = "Post-Match Egress"
     res_egress = engine.get_fallback_response(query, normal_state.to_dict())
     assert "Post-Match Egress" in res_egress
     assert "Egress Protocol" in res_egress or "outer perimeter gates" in res_egress
@@ -292,13 +337,18 @@ def test_execute_query_api_error(
 # 5. CONFIGURATION & COMPATIBILITY ALIASES TESTS
 # =====================================================================
 
-def test_config_properties() -> None:
+def test_config_properties(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify Config properties retrieve correct environmental values."""
     from config import Config
-    c = Config()
-    assert isinstance(c.APP_NAME, str)
-    assert isinstance(c.GEMINI_MODEL, str)
-    assert isinstance(c.GEMINI_API_KEY, str)
+    monkeypatch.setenv("GEMINI_API_KEY", "test_key")
+    c1 = Config()
+    assert c1.GEMINI_API_KEY == "test_key"
+    assert isinstance(c1.APP_NAME, str)
+    assert isinstance(c1.GEMINI_MODEL, str)
+
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    c2 = Config()
+    assert c2.GEMINI_API_KEY == ""
 
 
 def test_config_is_api_configured() -> None:
@@ -344,13 +394,22 @@ def test_compatibility_aliases() -> None:
 # =====================================================================
 
 class MockStreamlit:
+    """Mock implementation of Streamlit library for unit test execution."""
     class SessionState(dict):
+        """Mock SessionState dict object."""
         def __getattr__(self, name: str) -> Any:
             return self.get(name)
         def __setattr__(self, name: str, value: Any) -> None:
             self[name] = value
 
     def __init__(self, button_val: bool = False, chat_val: Any = None, submit_val: bool = False) -> None:
+        """Initializes mock Streamlit wrapper.
+
+        Args:
+            button_val: Value returned by simulation buttons.
+            chat_val: Value returned by chat input field.
+            submit_val: Value returned by forms.
+        """
         self.session_state = self.SessionState()
         self.sidebar = self
         self._button_val = button_val
@@ -358,44 +417,98 @@ class MockStreamlit:
         self._submit_val = submit_val
         
     def markdown(self, *args: Any, **kwargs: Any) -> None:
+        """Mock markdown parser."""
         return
+
     def columns(self, num_or_spec: Any) -> List[Any]:
+        """Mock columns renderer."""
         if isinstance(num_or_spec, int):
             return [self] * num_or_spec
         return [self] * len(num_or_spec)
-    def selectbox(self, *args: Any, **kwargs: Any) -> str: return "Pre-Match Arrival"
-    def slider(self, *args: Any, **kwargs: Any) -> int: return 50
-    def number_input(self, *args: Any, **kwargs: Any) -> int: return 10
-    def button(self, *args: Any, **kwargs: Any) -> bool: return self._button_val
-    def text_input(self, *args: Any, **kwargs: Any) -> str: return "Mock Title"
-    def text_area(self, *args: Any, **kwargs: Any) -> str: return "Mock Description"
-    def form(self, *args: Any, **kwargs: Any) -> Any: return self
-    def __enter__(self) -> Any: return self
+
+    def selectbox(self, *args: Any, **kwargs: Any) -> str:
+        """Mock dropdown selectbox."""
+        return "Pre-Match Arrival"
+
+    def slider(self, *args: Any, **kwargs: Any) -> int:
+        """Mock slider component."""
+        return 50
+
+    def number_input(self, *args: Any, **kwargs: Any) -> int:
+        """Mock numeric input selector."""
+        return 10
+
+    def button(self, *args: Any, **kwargs: Any) -> bool:
+        """Mock standard button component."""
+        return self._button_val
+
+    def text_input(self, *args: Any, **kwargs: Any) -> str:
+        """Mock single line text inputs."""
+        return "Mock Title"
+
+    def text_area(self, *args: Any, **kwargs: Any) -> str:
+        """Mock multiline text area."""
+        return "Mock Description"
+
+    def form(self, *args: Any, **kwargs: Any) -> Any:
+        """Mock context manager form."""
+        return self
+
+    def __enter__(self) -> Any:
+        """Enter block helper."""
+        return self
+
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        """Exit block helper."""
         return
+
     def error(self, *args: Any, **kwargs: Any) -> None:
+        """Mock error alert."""
         return
+
     def success(self, *args: Any, **kwargs: Any) -> None:
+        """Mock success alert."""
         return
+
     def warning(self, *args: Any, **kwargs: Any) -> None:
+        """Mock warning alert."""
         return
+
     def info(self, *args: Any, **kwargs: Any) -> None:
+        """Mock info alert."""
         return
-    def container(self, *args: Any, **kwargs: Any) -> Any: return self
-    def chat_message(self, *args: Any, **kwargs: Any) -> Any: return self
-    def chat_input(self, *args: Any, **kwargs: Any) -> Any: return self._chat_val
-    def spinner(self, *args: Any, **kwargs: Any) -> Any: return self
+
+    def container(self, *args: Any, **kwargs: Any) -> Any:
+        """Mock panel container."""
+        return self
+
+    def chat_message(self, *args: Any, **kwargs: Any) -> Any:
+        """Mock chat bubbles."""
+        return self
+
+    def chat_input(self, *args: Any, **kwargs: Any) -> Any:
+        """Mock chat text inputs."""
+        return self._chat_val
+
+    def spinner(self, *args: Any, **kwargs: Any) -> Any:
+        """Mock processing spinner."""
+        return self
+
     def rerun(self, *args: Any, **kwargs: Any) -> None:
+        """Mock interface refresh command."""
         return
+
     def set_page_config(self, *args: Any, **kwargs: Any) -> None:
+        """Mock config page setup."""
         return
-    def form_submit_button(self, *args: Any, **kwargs: Any) -> bool: return self._submit_val
+
+    def form_submit_button(self, *args: Any, **kwargs: Any) -> bool:
+        """Mock form submit action."""
+        return self._submit_val
 
 
 def test_ui_dashboard_rendering_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verifies all main presentation paths of AccessibilityUIDashboard render successfully."""
-    import streamlit as st
-    
     # 1. Normal render without user clicks/actions
     mock_st = MockStreamlit(button_val=False, chat_val=None, submit_val=False)
     mock_st.session_state.sanitizer = SecuritySanitizer()
@@ -409,7 +522,6 @@ def test_ui_dashboard_rendering_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(st, "session_state", mock_st.session_state)
     monkeypatch.setattr(st, "sidebar", mock_st)
 
-    from app import main
     main()
 
     # 2. Render with incident submission and button clicks
@@ -452,8 +564,6 @@ def test_ui_dashboard_rendering_paths(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_ui_dashboard_errors_and_fallbacks(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verifies UI error boundaries and edge-case fallback rendering paths."""
-    import streamlit as st
-    
     # Reset st to a new mock that triggers error paths
     mock_st = MockStreamlit(button_val=False, chat_val="test_query", submit_val=False)
     
@@ -467,8 +577,6 @@ def test_ui_dashboard_errors_and_fallbacks(monkeypatch: pytest.MonkeyPatch) -> N
     # Force is_api_configured to return True so API branch check runs
     monkeypatch.setattr(config, "is_api_configured", lambda: True)
 
-    from app import main, DecisionSupportEngine
-    
     # Helper to raise exceptions
     def raise_err(exc_type: type, msg: str) -> Any:
         def inner(*args: Any, **kwargs: Any) -> Any:
@@ -492,12 +600,10 @@ def test_ui_dashboard_errors_and_fallbacks(monkeypatch: pytest.MonkeyPatch) -> N
     main()
 
     # 4. Test KeyError inside update_gate_congestion and update_transit_delay in UI
-    from app import StadiumStateContext
     state = StadiumStateContext()
     monkeypatch.setattr(state, "update_gate_congestion", raise_err(KeyError, "Mock Gate Error"))
     monkeypatch.setattr(state, "update_transit_delay", raise_err(KeyError, "Mock Transit Error"))
     
-    from app import AccessibilityUIDashboard, SecuritySanitizer
     dashboard = AccessibilityUIDashboard(state, SecuritySanitizer(), DecisionSupportEngine())
     dashboard.render_sidebar()
 
@@ -571,9 +677,6 @@ def test_execute_query_success(
 
 def test_ui_mobilized_critical_incident(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verifies UI renders successfully when stadium state is in critical/mobilized status."""
-    import streamlit as st
-    from app import StadiumStateContext, AccessibilityUIDashboard, SecuritySanitizer, DecisionSupportEngine
-
     state = StadiumStateContext("Post-Match Egress")
     state.add_incident(
         "Critical Jam", "Gate A", "Critical", "Gate A is blocked by heavy crowding."
@@ -596,9 +699,6 @@ def test_ui_mobilized_critical_incident(monkeypatch: pytest.MonkeyPatch) -> None
 
 def test_ui_fallback_exception_handling(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verifies fallback exception handling block inside the chat assistant UI."""
-    import streamlit as st
-    from app import main, DecisionSupportEngine
-
     mock_st_fail = MockStreamlit(button_val=False, chat_val="test_query", submit_val=False)
     for name in dir(mock_st_fail):
         if not name.startswith("__") and hasattr(st, name):
@@ -622,9 +722,6 @@ def test_ui_fallback_exception_handling(monkeypatch: pytest.MonkeyPatch) -> None
 
 def test_main_entry_point(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verifies the main entry point runs when app.py is executed as main."""
-    import runpy
-    import streamlit as st
-
     mock_st = MockStreamlit(button_val=False, chat_val=None, submit_val=False)
     for name in dir(mock_st):
         if not name.startswith("__") and hasattr(st, name):
@@ -633,6 +730,3 @@ def test_main_entry_point(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(st, "sidebar", mock_st)
 
     runpy.run_path("app.py", run_name="__main__")
-
-
-

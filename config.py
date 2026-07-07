@@ -4,7 +4,6 @@ Loads variables from the environment and defines the core system exception hiera
 """
 
 import os
-from typing import Optional
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -70,7 +69,6 @@ SanitizationError = SecurityInjectionException
 APIConnectionError = LLMTimeoutException
 
 
-
 # ==========================================
 # CONFIGURATION MANAGEMENT CLASS
 # ==========================================
@@ -86,8 +84,14 @@ class Config:
 
     def __init__(self) -> None:
         """Initializes configuration properties."""
-        self._gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
-        self._gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+        # Purely ingestion via os.environ.get with explicit handling if missing
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if api_key is None:
+            self._gemini_api_key = ""
+        else:
+            self._gemini_api_key = api_key
+
+        self._gemini_model: str = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
         self._app_name: str = "FIFA 2026 Ops Commander"
 
     @property
