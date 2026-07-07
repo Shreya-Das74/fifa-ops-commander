@@ -166,6 +166,46 @@ def get_fallback_response(query: str, state_dict: Dict[str, Any]) -> str:
         return _fallback_default_plan(query_lower, state_dict, match_phase)
 
 
+def get_incident_commander_fallback(incident: Dict[str, Any], state_dict: Dict[str, Any]) -> str:
+    """Builds a deterministic incident commander tactical plan when Gemini is offline.
+
+    Args:
+        incident: The incident dictionary to manage.
+        state_dict: The overall stadium state context dictionary.
+
+    Returns:
+        str: Markdown-formatted structured tactical directive response.
+    """
+    title = incident.get("title", "Custom Incident")
+    loc = incident.get("location", "Unknown Location")
+    prio = incident.get("priority", "Medium")
+    
+    risk_level = "🔴 CRITICAL" if prio == "Critical" else "🟡 HIGH" if prio == "High" else "🔵 MEDIUM"
+    res_time = "10-15 Minutes" if prio in ["Critical", "High"] else "20-30 Minutes"
+    
+    plan = f"""#### Incident Management Report: {title}
+- **Risk Level**: {risk_level}
+- **Estimated Resolution Time**: {res_time}
+
+- **Immediate Actions**:
+  1. Secure the immediate corridor at {loc} and deploy local supervisor.
+  2. Broadcast local guide warning signs.
+
+- **Volunteer Deployment**:
+  - Dispatch Volunteer Team V (Arabic/Spanish) to {loc} to handle spectator queries and maintain calm.
+
+- **Security Response**:
+  - Dispatch 4 security stewards to set up a perimeter cordon around {loc} to prevent secondary congestion.
+
+- **Medical Response**:
+  - Dispatch local stand first-aid helpers to {loc}.
+
+- **Public Announcement**:
+  - "Attention spectators near {loc}: please follow instructions from safety stewards and utilize alternative exits."
+"""
+    return plan
+
+
 class DecisionSupportEngine:
     """Handles routing queries between Gemini API and localized fallback heuristics."""
 
@@ -250,3 +290,73 @@ class DecisionSupportEngine:
             if isinstance(e, LLMTimeoutException):
                 raise e
             raise LLMTimeoutException(f"GenAI connection error: {str(e)}")
+
+    def generate_incident_commander_plan(self, incident: Dict[str, Any], state: StadiumStateContext) -> str:
+        """Generates a structured tactical incident plan via Gemini.
+
+        Falls back to a deterministic rule-based generator if API is offline.
+
+        Args:
+            incident: Details of the incident to manage.
+            state: Active stadium telemetry context.
+
+        Returns:
+            str: Markdown-formatted tactical guidelines.
+        """
+        if not config.is_api_configured():
+            return get_incident_commander_fallback(incident, state.to_dict())
+
+        # Lazy configuration if not configured in init
+        if not self._configured or self._model is None:
+            try:
+                genai.configure(api_key=config.GEMINI_API_KEY)
+                self._model = genai.GenerativeModel(config.GEMINI_MODEL)
+                self._configured = True
+            except Exception:
+                return get_incident_commander_fallback(incident, state.to_dict())
+
+        state_dict = state.to_dict()
+        crowd_state = {name: d["congestion"] for name, d in state_dict["gates"].items()}
+        transit_state = {name: d["delay"] for name, d in state_dict["transit"].items()}
+        incidents_state = [i for i in state_dict["incidents"]]
+        weather = state.weather
+        accessibility = "Elevator Priority Active. Tactile guide paths clear."
+
+        system_prompt = f"""
+        You are the AI Incident Commander for the FIFA World Cup 2026.
+        Your role is to generate structured tactical incident management plans.
+
+        STADIUM CONTEXT:
+        - Crowd Congestion levels: {json.dumps(crowd_state)}
+        - Transit Delays: {json.dumps(transit_state)}
+        - Weather Conditions: {weather}
+        - Accessibility Status: {accessibility}
+        - Other Active Incidents: {json.dumps(incidents_state)}
+
+        INCIDENT TO MANAGE:
+        - Title: {incident.get('title')}
+        - Location: {incident.get('location')}
+        - Severity/Priority: {incident.get('priority')}
+        - Details: {incident.get('description')}
+
+        Generate a response containing exactly these sections in clean Markdown format:
+        1. **Risk Level**: (e.g. Critical, High, Medium, Low)
+        2. **Immediate Actions**: (Numbered bullet points)
+        3. **Volunteer Deployment**: (Directives for volunteer teams)
+        4. **Security Response**: (Directives for security stewards)
+        5. **Medical Response**: (Directives for first-aid / EMS)
+        6. **Public Announcement**: (Quotes for stadium announcements)
+        7. **Estimated Resolution Time**: (Time duration)
+        """
+
+        try:
+            response = self._model.generate_content(
+                contents=[
+                    {"role": "user", "parts": [system_prompt]}
+                ]
+            )
+            if not response or not response.text:
+                return get_incident_commander_fallback(incident, state_dict)
+            return response.text
+        except Exception:
+            return get_incident_commander_fallback(incident, state_dict)

@@ -49,6 +49,7 @@ def init_stadium_state(match_phase: str = "Pre-Match Arrival") -> Dict[str, Any]
     """
     return {
         "match_phase": match_phase,
+        "weather": "Clear, 24°C",
         "gates": {
             "Gate A": {
                 "name": "Gate A",
@@ -440,3 +441,8 @@ class StadiumStateContext:
     def to_dict(self) -> Dict[str, Any]:
         """Converts state to dict."""
         return self.state
+
+    @property
+    def weather(self) -> str:
+        """Gets weather conditions."""
+        return self.state.get("weather", "Clear, 24°C")

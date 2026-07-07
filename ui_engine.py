@@ -376,6 +376,72 @@ class AccessibilityUIDashboard:
             # Rerun interface
             st.rerun()
 
+    def render_incident_commander(self) -> None:
+        """Renders the AI Incident Commander section in the UI command terminal."""
+        st.markdown("<h2 style='font-size:1.35rem;'>🚨 AI Incident Commander</h2>", unsafe_allow_html=True)
+        st.markdown("<div class='metric-card'>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size:0.9rem; color:#9CA3AF;'>Generate instant tactical dispatches, public announcements, and security controls for active logs.</p>", unsafe_allow_html=True)
+        
+        incidents = self.state.incidents
+        inc_options = [f"{inc.incident_id}: {inc.title} ({inc.location})" for inc in incidents]
+        inc_options.append("Custom Situation...")
+        
+        selected_option = st.selectbox(
+            "Select Target Incident / Sector",
+            inc_options,
+            key="ic_select"
+        )
+        
+        custom_situation = ""
+        if selected_option == "Custom Situation...":
+            custom_situation = st.text_area(
+                "Describe Custom Incident / Situation",
+                placeholder="e.g. VIP parking entrance gate jam due to motorcade delay...",
+                key="ic_custom"
+            )
+            
+        if st.button("Generate Tactical Directives", use_container_width=True, key="ic_generate"):
+            # Prepare incident state payload
+            incident_data = {}
+            if selected_option == "Custom Situation...":
+                if not custom_situation.strip():
+                    st.error("Please describe the custom situation.")
+                    return
+                # Sanitize the input to prevent injection
+                try:
+                    clean_desc = self.sanitizer.sanitize_input(custom_situation)
+                except Exception as e:
+                    st.error(str(e))
+                    return
+                incident_data = {
+                    "id": "custom",
+                    "title": "Custom Operational Situation",
+                    "location": "Venue Area",
+                    "priority": "High",
+                    "description": clean_desc,
+                    "status": "Active"
+                }
+            else:
+                inc_id = selected_option.split(":")[0]
+                incident_obj = next((i for i in incidents if i.incident_id == inc_id), None)
+                if incident_obj:
+                    incident_data = incident_obj.to_dict()
+            
+            with st.spinner("Formulating incident response..."):
+                plan = self.engine.generate_incident_commander_plan(incident_data, self.state)
+                st.session_state.ic_plan = plan
+                st.rerun()
+                
+        if "ic_plan" in st.session_state and st.session_state.ic_plan:
+            st.markdown("---")
+            st.markdown("### 📋 Formulated Tactical Plan")
+            st.markdown(st.session_state.ic_plan)
+            if st.button("Dismiss Directives", key="ic_dismiss"):
+                st.session_state.ic_plan = ""
+                st.rerun()
+                
+        st.markdown("</div>", unsafe_allow_html=True)
+
     def render_ui(self) -> None:
         """Main rendering orchestrator executing CSS injection and grid rendering."""
         self.render_custom_css()
@@ -389,3 +455,4 @@ class AccessibilityUIDashboard:
             self.render_dashboard_charts()
         with chat_col:
             self.render_chat_assistant()
+            self.render_incident_commander()

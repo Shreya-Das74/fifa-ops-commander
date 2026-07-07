@@ -19,6 +19,7 @@ A delay at a light rail terminal, a scanner bottleneck at a public concourse, or
 - **🚆 Transportation Coordination**: Live delay tracking for Light Rail connections and the FIFA Fan Festival shuttle networks.
 - **🗣️ Multilingual Assistance**: Recommendations to deploy bilingual volunteer teams (Arabic, Spanish, French) to public gates based on spectator language profiles.
 - **🚨 Emergency Response**: Quick-action directives and cordons for crowd rushes, fire risks, or medical incidents.
+- **🛡️ AI Incident Commander**: A tactical dashboard section that generates safety-critical dispatches using Gemini, delivering Risk Level, Immediate Actions, Volunteer Deployment, Security Response, Medical Response, Public Announcement, and Estimated Resolution Time based on structured stadium context (crowds, weather, transit delays, accessibility, and active incident lists).
 - **🌿 Sustainability Insights**: Monitoring green transit options and carbon footprint reductions to align with FIFA's green tournament commitment.
 
 ---
