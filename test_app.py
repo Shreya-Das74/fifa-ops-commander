@@ -507,6 +507,20 @@ class MockStreamlit:
         return self._submit_val
 
 
+def inject_mock_streamlit(monkeypatch: pytest.MonkeyPatch, mock_st: MockStreamlit) -> None:
+    """Injects a mock Streamlit instance into the global st namespace using monkeypatch.
+
+    Args:
+        monkeypatch: Pytest utility for mock patching.
+        mock_st: The mock Streamlit instance to inject.
+    """
+    for name in dir(mock_st):
+        if not name.startswith("__") and hasattr(st, name):
+            monkeypatch.setattr(st, name, getattr(mock_st, name))
+    monkeypatch.setattr(st, "session_state", mock_st.session_state)
+    monkeypatch.setattr(st, "sidebar", mock_st)
+
+
 def test_ui_dashboard_rendering_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verifies all main presentation paths of AccessibilityUIDashboard render successfully."""
     # 1. Normal render without user clicks/actions
@@ -516,11 +530,7 @@ def test_ui_dashboard_rendering_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_st.session_state.stadium_state = StadiumStateContext()
     mock_st.session_state.chat_history = []
 
-    for name in dir(mock_st):
-        if not name.startswith("__") and hasattr(st, name):
-            monkeypatch.setattr(st, name, getattr(mock_st, name))
-    monkeypatch.setattr(st, "session_state", mock_st.session_state)
-    monkeypatch.setattr(st, "sidebar", mock_st)
+    inject_mock_streamlit(monkeypatch, mock_st)
 
     main()
 
@@ -531,11 +541,7 @@ def test_ui_dashboard_rendering_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_st_clicks.session_state.stadium_state = StadiumStateContext()
     mock_st_clicks.session_state.chat_history = []
 
-    for name in dir(mock_st_clicks):
-        if not name.startswith("__") and hasattr(st, name):
-            monkeypatch.setattr(st, name, getattr(mock_st_clicks, name))
-    monkeypatch.setattr(st, "session_state", mock_st_clicks.session_state)
-    monkeypatch.setattr(st, "sidebar", mock_st_clicks)
+    inject_mock_streamlit(monkeypatch, mock_st_clicks)
 
     # Force is_api_configured to return False for offline path
     monkeypatch.setattr(config, "is_api_configured", lambda: False)
@@ -553,11 +559,7 @@ def test_ui_dashboard_rendering_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_st_threat.session_state.stadium_state = StadiumStateContext()
     mock_st_threat.session_state.chat_history = []
 
-    for name in dir(mock_st_threat):
-        if not name.startswith("__") and hasattr(st, name):
-            monkeypatch.setattr(st, name, getattr(mock_st_threat, name))
-    monkeypatch.setattr(st, "session_state", mock_st_threat.session_state)
-    monkeypatch.setattr(st, "sidebar", mock_st_threat)
+    inject_mock_streamlit(monkeypatch, mock_st_threat)
     
     main()
 
@@ -568,11 +570,7 @@ def test_ui_dashboard_errors_and_fallbacks(monkeypatch: pytest.MonkeyPatch) -> N
     mock_st = MockStreamlit(button_val=False, chat_val="test_query", submit_val=False)
     
     # We do NOT populate the session state variables, so the main() initialization runs
-    for name in dir(mock_st):
-        if not name.startswith("__") and hasattr(st, name):
-            monkeypatch.setattr(st, name, getattr(mock_st, name))
-    monkeypatch.setattr(st, "session_state", mock_st.session_state)
-    monkeypatch.setattr(st, "sidebar", mock_st)
+    inject_mock_streamlit(monkeypatch, mock_st)
 
     # Force is_api_configured to return True so API branch check runs
     monkeypatch.setattr(config, "is_api_configured", lambda: True)
@@ -687,11 +685,8 @@ def test_ui_mobilized_critical_incident(monkeypatch: pytest.MonkeyPatch) -> None
     mock_st.session_state.decision_engine = DecisionSupportEngine()
     mock_st.session_state.stadium_state = state
     mock_st.session_state.chat_history = []
-    for name in dir(mock_st):
-        if not name.startswith("__") and hasattr(st, name):
-            monkeypatch.setattr(st, name, getattr(mock_st, name))
-    monkeypatch.setattr(st, "session_state", mock_st.session_state)
-    monkeypatch.setattr(st, "sidebar", mock_st)
+    
+    inject_mock_streamlit(monkeypatch, mock_st)
 
     dashboard = AccessibilityUIDashboard(state, SecuritySanitizer(), DecisionSupportEngine())
     dashboard.render_ui()
@@ -700,11 +695,8 @@ def test_ui_mobilized_critical_incident(monkeypatch: pytest.MonkeyPatch) -> None
 def test_ui_fallback_exception_handling(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verifies fallback exception handling block inside the chat assistant UI."""
     mock_st_fail = MockStreamlit(button_val=False, chat_val="test_query", submit_val=False)
-    for name in dir(mock_st_fail):
-        if not name.startswith("__") and hasattr(st, name):
-            monkeypatch.setattr(st, name, getattr(mock_st_fail, name))
-    monkeypatch.setattr(st, "session_state", mock_st_fail.session_state)
-    monkeypatch.setattr(st, "sidebar", mock_st_fail)
+    
+    inject_mock_streamlit(monkeypatch, mock_st_fail)
     
     monkeypatch.setattr(config, "is_api_configured", lambda: True)
 
@@ -723,10 +715,7 @@ def test_ui_fallback_exception_handling(monkeypatch: pytest.MonkeyPatch) -> None
 def test_main_entry_point(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verifies the main entry point runs when app.py is executed as main."""
     mock_st = MockStreamlit(button_val=False, chat_val=None, submit_val=False)
-    for name in dir(mock_st):
-        if not name.startswith("__") and hasattr(st, name):
-            monkeypatch.setattr(st, name, getattr(mock_st, name))
-    monkeypatch.setattr(st, "session_state", mock_st.session_state)
-    monkeypatch.setattr(st, "sidebar", mock_st)
+    
+    inject_mock_streamlit(monkeypatch, mock_st)
 
     runpy.run_path("app.py", run_name="__main__")
